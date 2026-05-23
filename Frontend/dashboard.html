@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="page-header">
+      <div class="page-header-left">
+        <h2>Dashboard</h2>
+        <p>Welcome back! Here is your blood bank overview.</p>
+      </div>
+      <div class="date-badge" id="dateBox"></div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card red">
+        <div class="stat-icon">👤</div>
+        <h3 id="totalDonors">—</h3>
+        <p>Total Donors</p>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-icon">🩸</div>
+        <h3 id="totalStock">—</h3>
+        <p>Blood Units Available</p>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">🏥</div>
+        <h3 id="totalHospitals">—</h3>
+        <p>Partner Hospitals</p>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-icon">📋</div>
+        <h3 id="pendingRequests">—</h3>
+        <p>Pending Requests</p>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-icon">💉</div>
+        <h3 id="totalDonations">—</h3>
+        <p>Total Donations</p>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+      <div class="card">
+        <h3>Recent Donations</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Donor</th><th>Units</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody id="recentDonations"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>⚠️ Low Stock Alert</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Blood Group</th><th>Units Left</th><th>Expires</th></tr></thead>
+            <tbody id="lowStock"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/sidebar.js"></script>
+<script>
+  renderSidebar('dashboard.html');
+  document.getElementById('dateBox').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  async function loadDashboard() {
+    const API = 'http://localhost:3000/api';
+    try {
+      const [donors, stock, hospitals, requests, donations] = await Promise.all([
+        fetch(`${API}/donors`).then(r=>r.json()),
+        fetch(`${API}/stock`).then(r=>r.json()),
+        fetch(`${API}/hospitals`).then(r=>r.json()),
+        fetch(`${API}/requests`).then(r=>r.json()),
+        fetch(`${API}/donations`).then(r=>r.json()),
+      ]);
+      document.getElementById('totalDonors').textContent    = donors.length;
+      document.getElementById('totalHospitals').textContent = hospitals.length;
+      document.getElementById('totalDonations').textContent = donations.length;
+      document.getElementById('totalStock').textContent     = stock.reduce((s,i)=>s+i.units_available,0);
+      document.getElementById('pendingRequests').textContent= requests.filter(r=>r.status==='Pending').length;
+
+      const tbody = document.getElementById('recentDonations');
+      const recent = donations.slice(0,5);
+      tbody.innerHTML = recent.length ? recent.map(d=>`
+        <tr>
+          <td><strong>${d.donor_name||'Donor #'+d.donor_id}</strong></td>
+          <td>${d.units_donated}</td>
+          <td>${d.donation_date?.split('T')[0]||'—'}</td>
+          <td><span class="badge badge-green">${d.health_check_result||'OK'}</span></td>
+        </tr>`).join('') : '<tr><td colspan="4" class="empty">No donations yet.</td></tr>';
+
+      const low = stock.filter(s=>s.units_available<5);
+      const lowTbody = document.getElementById('lowStock');
+      lowTbody.innerHTML = low.length ? low.map(s=>`
+        <tr>
+          <td><span class="badge badge-red">${s.blood_group}</span></td>
+          <td><strong>${s.units_available}</strong></td>
+          <td>${s.expiry_date?.split('T')[0]||'—'}</td>
+        </tr>`).join('') : '<tr><td colspan="3" class="empty">✅ All stock levels good</td></tr>';
+    } catch(e) { showToast('Could not load dashboard data','error'); }
+  }
+  loadDashboard();
+</script>
+</body>
+</html>

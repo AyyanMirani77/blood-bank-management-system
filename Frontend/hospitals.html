@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hospitals — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="page-header">
+      <div class="page-header-left"><h2>Hospitals</h2><p>Manage partner hospitals that request blood</p></div>
+    </div>
+    <div class="card">
+      <h3 id="formTitle">Add Hospital</h3>
+      <input type="hidden" id="editId">
+      <div class="form-grid">
+        <div class="form-group"><label>Hospital Name *</label><input type="text" id="name" placeholder="e.g. Khyber Teaching Hospital"></div>
+        <div class="form-group"><label>Contact Person</label><input type="text" id="contact_person" placeholder="Dr. Ahmed"></div>
+        <div class="form-group"><label>Phone</label><input type="text" id="phone" placeholder="0911234567"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="hospital@email.com"></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Address</label><input type="text" id="address" placeholder="Full address"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="saveHospital()">💾 Save Hospital</button>
+        <button class="btn btn-secondary" onclick="clearForm()">✕ Clear</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>All Hospitals</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Contact Person</th><th>Phone</th><th>Email</th><th>Actions</th></tr></thead>
+          <tbody id="hospitalTable"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/sidebar.js"></script>
+<script>
+  renderSidebar('hospitals.html');
+  const API = 'http://localhost:3000/api/hospitals';
+  async function loadHospitals() {
+    const tbody = document.getElementById('hospitalTable');
+    try {
+      const data = await fetch(API).then(r=>r.json());
+      if(!data.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏥</div><h4>No hospitals yet</h4><p>Add your first hospital above</p></div></td></tr>';return;}
+      tbody.innerHTML = data.map(h=>`<tr>
+        <td><span class="badge badge-gray">#${h.hospital_id}</span></td>
+        <td><strong>${h.name}</strong></td>
+        <td>${h.contact_person||'—'}</td>
+        <td>${h.phone||'—'}</td>
+        <td>${h.email||'—'}</td>
+        <td><div class="actions">
+          <button class="btn btn-secondary btn-sm" onclick="editHospital(${h.hospital_id})">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteHospital(${h.hospital_id})">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+    } catch(e){tbody.innerHTML='<tr><td colspan="6" class="empty">Error loading hospitals.</td></tr>';}
+  }
+  async function saveHospital() {
+    const id=document.getElementById('editId').value;
+    const body={name:document.getElementById('name').value,address:document.getElementById('address').value,contact_person:document.getElementById('contact_person').value,phone:document.getElementById('phone').value,email:document.getElementById('email').value};
+    if(!body.name){showToast('Hospital name is required!','error');return;}
+    const method=id?'PUT':'POST',url=id?`${API}/${id}`:API;
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    showToast(data.message||'Saved!'); clearForm(); loadHospitals();
+  }
+  async function editHospital(id) {
+    const h=await fetch(`${API}/${id}`).then(r=>r.json());
+    document.getElementById('editId').value=h.hospital_id;
+    document.getElementById('name').value=h.name;
+    document.getElementById('address').value=h.address||'';
+    document.getElementById('contact_person').value=h.contact_person||'';
+    document.getElementById('phone').value=h.phone||'';
+    document.getElementById('email').value=h.email||'';
+    document.getElementById('formTitle').textContent='✏️ Edit Hospital';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  async function deleteHospital(id) {
+    if(!confirm('Delete this hospital?'))return;
+    const res=await fetch(`${API}/${id}`,{method:'DELETE'});
+    const data=await res.json();
+    showToast(data.message||'Deleted!'); loadHospitals();
+  }
+  function clearForm() {
+    ['editId','name','address','contact_person','phone','email'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('formTitle').textContent='Add Hospital';
+  }
+  loadHospitals();
+</script>
+</body>
+</html>

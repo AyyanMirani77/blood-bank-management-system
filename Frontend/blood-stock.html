@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Stock — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="page-header"><div class="page-header-left"><h2>Blood Stock</h2><p>Track available blood units, collection and expiry dates</p></div></div>
+    <div class="card">
+      <h3 id="formTitle">Add Blood Stock</h3>
+      <input type="hidden" id="editId">
+      <div class="form-grid">
+        <div class="form-group"><label>Blood Group *</label><select id="blood_group"><option value="">Select</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div>
+        <div class="form-group"><label>Units Available *</label><input type="number" id="units_available" placeholder="e.g. 10" min="0"></div>
+        <div class="form-group"><label>Collection Date *</label><input type="date" id="collection_date"></div>
+        <div class="form-group"><label>Expiry Date *</label><input type="date" id="expiry_date"></div>
+        <div class="form-group"><label>Storage Location</label><input type="text" id="storage_location" placeholder="e.g. Fridge A, Shelf 2"></div>
+        <div class="form-group"><label>Status</label><select id="status"><option>Available</option><option>Reserved</option><option>Expired</option></select></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="saveStock()">💾 Save Stock</button>
+        <button class="btn btn-secondary" onclick="clearForm()">✕ Clear</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>All Blood Stock</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Blood Group</th><th>Units</th><th>Collection Date</th><th>Expiry Date</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="stockTable"><tr><td colspan="8" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/sidebar.js"></script>
+<script>
+  renderSidebar('blood-stock.html');
+  const API='http://localhost:3000/api/stock';
+  function statusBadge(s){return s==='Available'?'badge-green':s==='Expired'?'badge-red':'badge-orange';}
+  async function loadStock(){
+    const tbody=document.getElementById('stockTable');
+    try{
+      const data=await fetch(API).then(r=>r.json());
+      if(!data.length){tbody.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🩸</div><h4>No stock entries yet</h4><p>Add your first blood stock above</p></div></td></tr>';return;}
+      tbody.innerHTML=data.map(s=>`<tr>
+        <td><span class="badge badge-gray">#${s.stock_id}</span></td>
+        <td><span class="badge badge-red">${s.blood_group}</span></td>
+        <td><strong>${s.units_available}</strong></td>
+        <td>${s.collection_date?.split('T')[0]||'—'}</td>
+        <td>${s.expiry_date?.split('T')[0]||'—'}</td>
+        <td>${s.storage_location||'—'}</td>
+        <td><span class="badge ${statusBadge(s.status)}">${s.status}</span></td>
+        <td><div class="actions">
+          <button class="btn btn-secondary btn-sm" onclick="editStock(${s.stock_id})">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteStock(${s.stock_id})">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+    }catch(e){tbody.innerHTML='<tr><td colspan="8" class="empty">Error loading stock.</td></tr>';}
+  }
+  async function saveStock(){
+    const id=document.getElementById('editId').value;
+    const body={blood_group:document.getElementById('blood_group').value,units_available:document.getElementById('units_available').value,collection_date:document.getElementById('collection_date').value,expiry_date:document.getElementById('expiry_date').value,storage_location:document.getElementById('storage_location').value,status:document.getElementById('status').value};
+    if(!body.blood_group||!body.units_available||!body.collection_date||!body.expiry_date){showToast('Please fill all required fields!','error');return;}
+    const method=id?'PUT':'POST',url=id?`${API}/${id}`:API;
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    showToast(data.message); clearForm(); loadStock();
+  }
+  async function editStock(id){
+    const s=await fetch(`${API}/${id}`).then(r=>r.json());
+    document.getElementById('editId').value=s.stock_id;
+    document.getElementById('blood_group').value=s.blood_group;
+    document.getElementById('units_available').value=s.units_available;
+    document.getElementById('collection_date').value=s.collection_date?.split('T')[0]||'';
+    document.getElementById('expiry_date').value=s.expiry_date?.split('T')[0]||'';
+    document.getElementById('storage_location').value=s.storage_location||'';
+    document.getElementById('status').value=s.status;
+    document.getElementById('formTitle').textContent='✏️ Edit Stock';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  async function deleteStock(id){
+    if(!confirm('Delete this stock entry?'))return;
+    const res=await fetch(`${API}/${id}`,{method:'DELETE'});
+    const data=await res.json();
+    showToast(data.message); loadStock();
+  }
+  function clearForm(){
+    ['editId','units_available','storage_location'].forEach(id=>document.getElementById(id).value='');
+    ['blood_group','status'].forEach(id=>document.getElementById(id).selectedIndex=0);
+    ['collection_date','expiry_date'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('formTitle').textContent='Add Blood Stock';
+  }
+  loadStock();
+</script>
+</body>
+</html>

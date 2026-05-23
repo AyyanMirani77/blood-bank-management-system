@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distribution — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+      <div class="page-header">
+        <h2>🚚 Distribution</h2>
+        <p>Record blood units distributed to hospitals</p>
+      </div>
+
+      <div class="card">
+        <h3>Record Distribution</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Blood Request *</label>
+            <select id="request_id"><option value="">Loading requests...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Blood Stock *</label>
+            <select id="stock_id"><option value="">Loading stock...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Units Distributed *</label>
+            <input type="number" id="units_distributed" placeholder="e.g. 2" min="1">
+          </div>
+          <div class="form-group">
+            <label>Distribution Date *</label>
+            <input type="date" id="distribution_date">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label>Notes</label>
+            <input type="text" id="notes" placeholder="Any additional notes...">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveDistribution()">💾 Record Distribution</button>
+      </div>
+
+      <div class="card">
+        <h3>All Distributions</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Hospital</th><th>Blood Group</th><th>Units</th><th>Date</th><th>Notes</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="distTable">
+              <tr><td colspan="7" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('distribution.html');
+    const adminId = localStorage.getItem('adminId');
+    const API = 'http://localhost:3000/api/distribution';
+
+    async function loadDropdowns() {
+      const [requests, stock] = await Promise.all([
+        fetch('http://localhost:3000/api/requests').then(r => r.json()),
+        fetch('http://localhost:3000/api/stock').then(r => r.json()),
+      ]);
+      document.getElementById('request_id').innerHTML =
+        '<option value="">Select Request</option>' +
+        requests.filter(r => r.status === 'Pending').map(r => `<option value="${r.request_id}">#${r.request_id} — ${r.hospital_name} (${r.blood_group})</option>`).join('');
+      document.getElementById('stock_id').innerHTML =
+        '<option value="">Select Stock</option>' +
+        stock.filter(s => s.status === 'Available' && s.units_available > 0).map(s => `<option value="${s.stock_id}">${s.blood_group} — ${s.units_available} units</option>`).join('');
+    }
+
+    async function loadDistributions() {
+      const tbody = document.getElementById('distTable');
+      const data  = await fetch(API).then(r => r.json());
+      if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">🚚</div>No distributions yet.</td></tr>'; return; }
+      tbody.innerHTML = data.map(d => `
+        <tr>
+          <td>#${d.distribution_id}</td>
+          <td><strong>${d.hospital_name || '—'}</strong></td>
+          <td><span class="badge badge-red">${d.blood_group || '—'}</span></td>
+          <td>${d.units_distributed} units</td>
+          <td>${d.distribution_date?.split('T')[0] || '—'}</td>
+          <td>${d.notes || '—'}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteDistribution(${d.distribution_id})">🗑️</button></td>
+        </tr>`).join('');
+    }
+
+    async function saveDistribution() {
+      const body = {
+        request_id:        document.getElementById('request_id').value,
+        stock_id:          document.getElementById('stock_id').value,
+        admin_id:          adminId,
+        units_distributed: document.getElementById('units_distributed').value,
+        distribution_date: document.getElementById('distribution_date').value,
+        notes:             document.getElementById('notes').value,
+      };
+      if (!body.request_id || !body.stock_id || !body.units_distributed || !body.distribution_date) {
+        showToast('Please fill all required fields!', 'error'); return;
+      }
+      const res  = await fetch(API, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      showToast(data.message || 'Distribution recorded!');
+      loadDropdowns(); loadDistributions();
+    }
+
+    async function deleteDistribution(id) {
+      if (!confirm('Delete this distribution record?')) return;
+      await fetch(`${API}/${id}`, { method: 'DELETE' });
+      showToast('Deleted!'); loadDistributions();
+    }
+
+    loadDropdowns(); loadDistributions();
+  </script>
+</body>
+</html>

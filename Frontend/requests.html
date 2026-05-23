@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Requests — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+      <div class="page-header">
+        <h2>📋 Blood Requests</h2>
+        <p>Manage blood requests from hospitals</p>
+      </div>
+
+      <div class="card">
+        <h3 id="formTitle">New Blood Request</h3>
+        <input type="hidden" id="editId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Hospital *</label>
+            <select id="hospital_id"><option value="">Loading...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Blood Group *</label>
+            <select id="blood_group">
+              <option value="">Select</option>
+              <option>A+</option><option>A-</option>
+              <option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option>
+              <option>O+</option><option>O-</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Units Requested *</label>
+            <input type="number" id="units_requested" placeholder="e.g. 3" min="1">
+          </div>
+          <div class="form-group">
+            <label>Request Date *</label>
+            <input type="date" id="request_date">
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="priority">
+              <option>Normal</option><option>Urgent</option><option>Critical</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="status">
+              <option>Pending</option><option>Fulfilled</option><option>Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-primary" onclick="saveRequest()">💾 Save Request</button>
+          <button class="btn btn-secondary" onclick="clearForm()">✕ Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>All Blood Requests</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Hospital</th><th>Blood Group</th><th>Units</th><th>Date</th><th>Priority</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="requestTable">
+              <tr><td colspan="8" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('requests.html');
+    const adminId = localStorage.getItem('adminId');
+    const API = 'http://localhost:3000/api/requests';
+
+    async function loadDropdowns() {
+      const hospitals = await fetch('http://localhost:3000/api/hospitals').then(r => r.json());
+      document.getElementById('hospital_id').innerHTML =
+        '<option value="">Select Hospital</option>' +
+        hospitals.map(h => `<option value="${h.hospital_id}">${h.name}</option>`).join('');
+    }
+
+    function priorityBadge(p) {
+      if (p === 'Critical') return 'badge-red';
+      if (p === 'Urgent')   return 'badge-orange';
+      return 'badge-blue';
+    }
+
+    async function loadRequests() {
+      const tbody = document.getElementById('requestTable');
+      const data  = await fetch(API).then(r => r.json());
+      if (!data.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty"><div class="empty-icon">📋</div>No requests yet.</td></tr>'; return; }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>#${r.request_id}</td>
+          <td><strong>${r.hospital_name || r.hospital_id}</strong></td>
+          <td><span class="badge badge-red">${r.blood_group}</span></td>
+          <td>${r.units_requested}</td>
+          <td>${r.request_date?.split('T')[0] || '—'}</td>
+          <td><span class="badge ${priorityBadge(r.priority)}">${r.priority}</span></td>
+          <td><span class="badge ${r.status === 'Fulfilled' ? 'badge-green' : r.status === 'Cancelled' ? 'badge-gray' : 'badge-orange'}">${r.status}</span></td>
+          <td>
+            <div class="actions">
+              <button class="btn btn-secondary btn-sm" onclick="editRequest(${r.request_id})">✏️</button>
+              <button class="btn btn-danger btn-sm"    onclick="deleteRequest(${r.request_id})">🗑️</button>
+            </div>
+          </td>
+        </tr>`).join('');
+    }
+
+    async function saveRequest() {
+      const id   = document.getElementById('editId').value;
+      const body = {
+        hospital_id:     document.getElementById('hospital_id').value,
+        admin_id:        adminId,
+        blood_group:     document.getElementById('blood_group').value,
+        units_requested: document.getElementById('units_requested').value,
+        request_date:    document.getElementById('request_date').value,
+        priority:        document.getElementById('priority').value,
+        status:          document.getElementById('status').value,
+      };
+      if (!body.hospital_id || !body.blood_group || !body.units_requested || !body.request_date) {
+        showToast('Please fill all required fields!', 'error'); return;
+      }
+      const method = id ? 'PUT' : 'POST';
+      const url    = id ? `${API}/${id}` : API;
+      const res    = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data   = await res.json();
+      showToast(data.message); clearForm(); loadRequests();
+    }
+
+    async function editRequest(id) {
+      const r = await fetch(`${API}/${id}`).then(r => r.json());
+      document.getElementById('editId').value          = r.request_id;
+      document.getElementById('hospital_id').value     = r.hospital_id;
+      document.getElementById('blood_group').value     = r.blood_group;
+      document.getElementById('units_requested').value = r.units_requested;
+      document.getElementById('request_date').value    = r.request_date?.split('T')[0] || '';
+      document.getElementById('priority').value        = r.priority;
+      document.getElementById('status').value          = r.status;
+      document.getElementById('formTitle').textContent = '✏️ Edit Request';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteRequest(id) {
+      if (!confirm('Delete this request?')) return;
+      await fetch(`${API}/${id}`, { method: 'DELETE' });
+      showToast('Deleted!'); loadRequests();
+    }
+
+    function clearForm() {
+      document.getElementById('editId').value = '';
+      document.getElementById('units_requested').value = '';
+      document.getElementById('request_date').value = '';
+      ['hospital_id','blood_group','priority','status'].forEach(id => document.getElementById(id).selectedIndex = 0);
+      document.getElementById('formTitle').textContent = 'New Blood Request';
+    }
+
+    loadDropdowns(); loadRequests();
+  </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expiry Log — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+      <div class="page-header">
+        <h2>⚠️ Expiry Log</h2>
+        <p>Track expired blood units and actions taken</p>
+      </div>
+
+      <div class="card">
+        <h3>Log Expiry</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Blood Stock *</label>
+            <select id="stock_id"><option value="">Loading stock...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Units Expired *</label>
+            <input type="number" id="units_expired" placeholder="e.g. 2" min="1">
+          </div>
+          <div class="form-group">
+            <label>Expiry Date *</label>
+            <input type="date" id="expiry_date">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label>Action Taken</label>
+            <input type="text" id="action_taken" placeholder="e.g. Disposed according to protocol, Sent for testing...">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveLog()">💾 Log Expiry</button>
+      </div>
+
+      <div class="card">
+        <h3>All Expiry Logs</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Blood Group</th><th>Units Expired</th><th>Expiry Date</th><th>Admin</th><th>Action Taken</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="logTable">
+              <tr><td colspan="7" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('expiry-log.html');
+    const adminId = localStorage.getItem('adminId');
+    const API = 'http://localhost:3000/api/expiry';
+
+    async function loadDropdowns() {
+      const stock = await fetch('http://localhost:3000/api/stock').then(r => r.json());
+      document.getElementById('stock_id').innerHTML =
+        '<option value="">Select Stock Entry</option>' +
+        stock.map(s => `<option value="${s.stock_id}">${s.blood_group} — ${s.units_available} units (expires: ${s.expiry_date?.split('T')[0] || '?'})</option>`).join('');
+    }
+
+    async function loadLogs() {
+      const tbody = document.getElementById('logTable');
+      const data  = await fetch(API).then(r => r.json());
+      if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">⚠️</div>No expiry logs yet.</td></tr>'; return; }
+      tbody.innerHTML = data.map(e => `
+        <tr>
+          <td>#${e.log_id}</td>
+          <td><span class="badge badge-red">${e.blood_group || '—'}</span></td>
+          <td>${e.units_expired} units</td>
+          <td>${e.expiry_date?.split('T')[0] || '—'}</td>
+          <td>${e.admin_name || '—'}</td>
+          <td>${e.action_taken || '—'}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteLog(${e.log_id})">🗑️</button></td>
+        </tr>`).join('');
+    }
+
+    async function saveLog() {
+      const body = {
+        stock_id:     document.getElementById('stock_id').value,
+        admin_id:     adminId,
+        units_expired:document.getElementById('units_expired').value,
+        expiry_date:  document.getElementById('expiry_date').value,
+        action_taken: document.getElementById('action_taken').value,
+      };
+      if (!body.stock_id || !body.units_expired || !body.expiry_date) {
+        showToast('Please fill all required fields!', 'error'); return;
+      }
+      const res  = await fetch(API, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      showToast(data.message || 'Logged!');
+      loadDropdowns(); loadLogs();
+    }
+
+    async function deleteLog(id) {
+      if (!confirm('Delete this log entry?')) return;
+      await fetch(`${API}/${id}`, { method: 'DELETE' });
+      showToast('Deleted!'); loadLogs();
+    }
+
+    loadDropdowns(); loadLogs();
+  </script>
+</body>
+</html>

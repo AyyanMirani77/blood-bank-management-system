@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Donations — Blood Bank</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+      <div class="page-header">
+        <h2>💉 Donations</h2>
+        <p>Record and track blood donation events</p>
+      </div>
+
+      <div class="card">
+        <h3>Record New Donation</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Donor *</label>
+            <select id="donor_id"><option value="">Loading donors...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Blood Stock Entry *</label>
+            <select id="stock_id"><option value="">Loading stock...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Units Donated *</label>
+            <input type="number" id="units_donated" placeholder="e.g. 1" min="1">
+          </div>
+          <div class="form-group">
+            <label>Donation Date *</label>
+            <input type="date" id="donation_date">
+          </div>
+          <div class="form-group">
+            <label>Health Check Result</label>
+            <select id="health_check_result">
+              <option>Passed</option><option>Failed</option><option>Deferred</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveDonation()">💾 Record Donation</button>
+      </div>
+
+      <div class="card">
+        <h3>All Donations</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Donor</th><th>Units</th><th>Date</th><th>Health Check</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="donationTable">
+              <tr><td colspan="6" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('donations.html');
+    const adminId = localStorage.getItem('adminId');
+
+    async function loadDropdowns() {
+      const [donors, stock] = await Promise.all([
+        fetch('http://localhost:3000/api/donors').then(r => r.json()),
+        fetch('http://localhost:3000/api/stock').then(r => r.json()),
+      ]);
+      document.getElementById('donor_id').innerHTML =
+        '<option value="">Select Donor</option>' +
+        donors.map(d => `<option value="${d.donor_id}">${d.name} (${d.blood_group})</option>`).join('');
+      document.getElementById('stock_id').innerHTML =
+        '<option value="">Select Stock Entry</option>' +
+        stock.filter(s => s.status === 'Available').map(s => `<option value="${s.stock_id}">${s.blood_group} — ${s.units_available} units available</option>`).join('');
+    }
+
+    async function loadDonations() {
+      const tbody = document.getElementById('donationTable');
+      const data  = await fetch('http://localhost:3000/api/donations').then(r => r.json());
+      if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="empty-icon">💉</div>No donations recorded yet.</td></tr>'; return; }
+      tbody.innerHTML = data.map(d => `
+        <tr>
+          <td>#${d.donation_id}</td>
+          <td><strong>${d.donor_name || d.donor_id}</strong></td>
+          <td>${d.units_donated} units</td>
+          <td>${d.donation_date?.split('T')[0] || '—'}</td>
+          <td><span class="badge ${d.health_check_result === 'Passed' ? 'badge-green' : 'badge-orange'}">${d.health_check_result || '—'}</span></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteDonation(${d.donation_id})">🗑️</button></td>
+        </tr>`).join('');
+    }
+
+    async function saveDonation() {
+      const body = {
+        donor_id:            document.getElementById('donor_id').value,
+        stock_id:            document.getElementById('stock_id').value,
+        admin_id:            adminId,
+        units_donated:       document.getElementById('units_donated').value,
+        donation_date:       document.getElementById('donation_date').value,
+        health_check_result: document.getElementById('health_check_result').value,
+      };
+      if (!body.donor_id || !body.stock_id || !body.units_donated || !body.donation_date) {
+        showToast('Please fill all required fields!', 'error'); return;
+      }
+      const res  = await fetch('http://localhost:3000/api/donations', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      showToast(data.message || 'Donation recorded!');
+      loadDonations(); loadDropdowns();
+    }
+
+    async function deleteDonation(id) {
+      if (!confirm('Delete this donation record?')) return;
+      await fetch(`http://localhost:3000/api/donations/${id}`, { method: 'DELETE' });
+      showToast('Deleted!'); loadDonations();
+    }
+
+    loadDropdowns(); loadDonations();
+  </script>
+</body>
+</html>

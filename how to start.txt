@@ -1,0 +1,5 @@
+
+✅ Start XAMPP → Apache + MySQL both green
+✅ Open VS Code → Open Frontend folder
+✅ Terminal → cd Backend → node server.js
+✅ Right click index.html → Open with Live Server
